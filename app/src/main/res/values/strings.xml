@@ -280,4 +280,6 @@ be temporary, and you can try again later.</li>
     <string name="geolocation_dialog_allow">ALLOW</string>
     <string name="geolocation_dialog_block">BLOCK</string>
 
+    <!-- ShoutCut Toast Message -->
+    <string name="shortcut_toast_message">%1$s was added to your Home screen</string>
 </resources>

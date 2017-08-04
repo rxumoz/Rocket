@@ -111,7 +111,10 @@
             android:layout_height="match_parent"
             android:layout_weight="1" />
 
-        <LinearLayout style="@style/MenuButton">
+        <LinearLayout
+            android:id="@+id/menu_add_to_home"
+            android:onClick="onMenuItemClicked"
+            style="@style/MenuButton">
 
             <ImageView
                 style="@style/MenuButton2"

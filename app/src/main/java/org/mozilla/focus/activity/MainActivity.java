@@ -8,6 +8,8 @@ package org.mozilla.focus.activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -18,6 +20,7 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
 import android.view.View;
+import android.widget.Toast;
 
 import org.mozilla.focus.R;
 import org.mozilla.focus.fragment.BrowserFragment;
@@ -223,6 +226,9 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
             case R.id.menu_preferences:
                 onPreferenceClicked();
                 break;
+            case  R.id.menu_add_to_home:
+                onAddToHomeClicked();
+                break;
             case R.id.action_back:
             case R.id.action_next:
             case R.id.action_refresh:
@@ -269,6 +275,58 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
 
     private void onDownloadClicked() {
         showHistoryAndDownload(false);
+    }
+
+    private void onAddToHomeClicked() {
+        final BrowserFragment browserFragment = getBrowserFragment();
+        if (browserFragment == null || !browserFragment.isVisible()) {
+            //Do Nothing
+            return;
+        }
+
+        if (browserFragment.isLoading()) {
+            //WebView is loading. Not Ready to getTitle() or getFavicon().
+            //Maybe Toast a Message?
+            return;
+        }
+
+        String title = browserFragment.getTitle();
+        String url = browserFragment.getWebViewUrl();
+        Bitmap bmIcon = browserFragment.getFavicon();
+
+        Intent shortcutIntent = new Intent(Intent.ACTION_VIEW);
+        shortcutIntent.setClass(this, MainActivity.class);
+        shortcutIntent.setData(Uri.parse(url));
+
+        createHomescreenIcon(shortcutIntent, title, url, bmIcon);
+    }
+
+    private void createHomescreenIcon(final Intent shortcutIntent, final String title,
+                                      final String url, final Bitmap bmIcon) {
+        final Intent intent = new Intent("com.android.launcher.action.INSTALL_SHORTCUT");
+        intent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, shortcutIntent);
+
+        if (bmIcon != null) {
+            intent.putExtra(Intent.EXTRA_SHORTCUT_ICON, bmIcon);
+        } else {
+            //need default icon?
+            Intent.ShortcutIconResource defaultIcon = Intent.ShortcutIconResource.fromContext(this, R.mipmap.ic_launcher);
+            intent.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, defaultIcon);
+        }
+
+        String toast_title;
+        if (title != null) {
+            intent.putExtra(Intent.EXTRA_SHORTCUT_NAME, title);
+            toast_title = title;
+        } else {
+            intent.putExtra(Intent.EXTRA_SHORTCUT_NAME, url);
+            toast_title = Uri.parse(url).getHost();
+        }
+
+        intent.putExtra("duplicate", false);
+        this.sendBroadcast(intent);
+
+        Toast.makeText(this, getString(R.string.shortcut_toast_message, toast_title), Toast.LENGTH_SHORT).show();
     }
 
     private BrowserFragment getBrowserFragment() {

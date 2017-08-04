@@ -14,6 +14,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
@@ -676,5 +677,32 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
     public boolean isBlockingEnabled() {
         final IWebView webView = getWebView();
         return webView == null || webView.isBlockingEnabled();
+    }
+
+    public Bitmap getFavicon() {
+        final IWebView webView = getWebView();
+        if (webView != null) {
+            return  webView.getFavicon();
+        }
+
+        return null;
+    }
+
+    public String getTitle() {
+        final IWebView webView = getWebView();
+        if (webView != null) {
+            return webView.getTitle();
+        }
+
+        return "";
+    }
+
+    public String getWebViewUrl() {
+        final IWebView webView = getWebView();
+        if (webView != null) {
+            return  webView.getUrl();
+        }
+
+        return  "";
     }
 }
