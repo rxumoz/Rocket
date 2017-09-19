@@ -16,7 +16,6 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -29,18 +28,18 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
-import android.webkit.WebStorage;
 import android.widget.Toast;
 
 import org.mozilla.focus.R;
 import org.mozilla.focus.fragment.BrowserFragment;
 import org.mozilla.focus.fragment.FirstrunFragment;
 import org.mozilla.focus.fragment.ListPanelDialog;
-import org.mozilla.focus.fragment.ScreenCaptureDialogFragment;
 import org.mozilla.focus.home.HomeFragment;
 import org.mozilla.focus.locale.LocaleAwareAppCompatActivity;
+import org.mozilla.focus.screenshot.CaptureCallback;
 import org.mozilla.focus.screenshot.ScreenshotCaptureTask;
 import org.mozilla.focus.screenshot.ScreenshotGridFragment;
+import org.mozilla.focus.screenshot.ScreenshotIntent;
 import org.mozilla.focus.screenshot.ScreenshotViewerActivity;
 import org.mozilla.focus.telemetry.TelemetryWrapper;
 import org.mozilla.focus.urlinput.UrlInputFragment;
@@ -63,7 +62,6 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
 
     public static final String EXTRA_TEXT_SELECTION = "text_selection";
     private static int REQUEST_CODE_STORAGE_PERMISSION = 101;
-    private static final Handler HANDLER = new Handler();
 
     private String pendingUrl;
 
@@ -133,20 +131,6 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
     public void applyLocale() {
         // re-create bottom sheet menu
         setUpMenu();
-    }
-
-    @Override
-    protected void onStart() {
-        // TODO: handle fragment creation
-        //HomeFragment homeFragment = (HomeFragment) getSupportFragmentManager().findFragmentByTag(HomeFragment.FRAGMENT_TAG);
-        //if (homeFragment != null) {
-        //    getTopSitesPresenter().setView(homeFragment);
-        //}
-        //UrlInputFragment urlInputFragment = (UrlInputFragment) getSupportFragmentManager().findFragmentByTag(UrlInputFragment.FRAGMENT_TAG);
-        //if (urlInputFragment != null) {
-        //    getUrlInputPresenter().setView(urlInputFragment);
-        //}
-        super.onStart();
     }
 
     @Override
@@ -501,15 +485,11 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
 
         final WeakReference<Context> refContext;
         final WeakReference<BrowserFragment> refBrowserFragment;
-        final WeakReference<ScreenCaptureDialogFragment> refScreenCaptureDialogFragment;
-        final WeakReference<View> refContainerView;
 
-        CaptureRunnable(Context context, BrowserFragment browserFragment, ScreenCaptureDialogFragment screenCaptureDialogFragment, View container) {
+        CaptureRunnable(Context context, BrowserFragment browserFragment) {
             super(context);
             refContext = new WeakReference<>(context);
             refBrowserFragment = new WeakReference<>(browserFragment);
-            refScreenCaptureDialogFragment = new WeakReference<>(screenCaptureDialogFragment);
-            refContainerView = new WeakReference<>(container);
         }
 
         @Override
@@ -522,13 +502,17 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
                 //  onCaptureComplete called
             } else {
                 //  Capture failed
-                promptScreenshotResult(R.string.screenshot_failed, null);
+                final Context context = refContext.get();
+                if (context == null) {
+                    return;
+                }
+                ScreenshotIntent.notifyCaptureFail(context);
             }
         }
 
         @Override
         public void onCaptureComplete(String title, String url, Bitmap bitmap) {
-            Context context = refContext.get();
+            final Context context = refContext.get();
             if (context == null) {
                 return;
             }
@@ -537,59 +521,14 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
         }
 
         @Override
-        protected void onPreExecute() {
-            ScreenCaptureDialogFragment screenCaptureDialogFragment = refScreenCaptureDialogFragment.get();
-            if (screenCaptureDialogFragment == null) {
-                cancel(true);
-                return;
-            }
-            screenCaptureDialogFragment.start();
-        }
-
-        @Override
         protected void onPostExecute(String path) {
-            ScreenCaptureDialogFragment screenCaptureDialogFragment = refScreenCaptureDialogFragment.get();
-            if (screenCaptureDialogFragment == null) {
+            final Context context = refContext.get();
+            if (context == null) {
                 cancel(true);
                 return;
             }
-            final int captureResultResource;
-            if (TextUtils.isEmpty(path)) {
-                screenCaptureDialogFragment.dismiss();
-                captureResultResource = R.string.screenshot_failed;
-            } else {
-                screenCaptureDialogFragment.dismiss(true);
-                captureResultResource = R.string.screenshot_saved;
-            }
-
-            promptScreenshotResult(captureResultResource, path);
+            ScreenshotIntent.notifyCaptureSuccess(context, path);
         }
-
-        private void promptScreenshotResult(int snackbarTitleId, final String path){
-            final View container = refContainerView.get();
-            if (container == null) {
-                return;
-            }
-
-            final BrowserFragment browserFragment = refBrowserFragment.get();
-            Snackbar snackbar = Snackbar.make(container, snackbarTitleId, Snackbar.LENGTH_SHORT);
-            if (!TextUtils.isEmpty(path) && browserFragment != null) {
-                snackbar.setAction(R.string.label_menu_share, new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        Uri uri = Uri.fromFile(new File(path));
-                        Intent share = new Intent(Intent.ACTION_SEND);
-                        share.putExtra(Intent.EXTRA_STREAM, uri);
-                        share.setType("image/*");
-                        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        browserFragment.startActivity(Intent.createChooser(share, null));
-                        TelemetryWrapper.shareCaptureImage(true);
-                    }
-                });
-            }
-            snackbar.show();
-        }
-
     }
 
     private void showLoadingAndCapture(final BrowserFragment browserFragment) {
@@ -597,12 +536,36 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
             return;
         }
         hasPendingScreenCaptureTask = false;
-        final ScreenCaptureDialogFragment capturingFragment = ScreenCaptureDialogFragment.newInstance();
-        capturingFragment.show(getSupportFragmentManager(), "capturingFragment");
 
-        final int WAIT_INTERVAL = 150;
-        // Post delay to wait for Dialog to show
-        HANDLER.postDelayed(new CaptureRunnable(MainActivity.this, browserFragment, capturingFragment, findViewById(R.id.container)), WAIT_INTERVAL);
+        ScreenshotIntent.startCaptureBridge(this, new CaptureCallback.CaptureCallbackAdapter() {
+            @Override
+            public void onCaptureStart() {
+                runOnUiThread(new CaptureRunnable(MainActivity.this, browserFragment));
+            }
+        });
+
+        ScreenshotIntent.startStubActivity(this);
+
+    }
+
+    private static void promptScreenshotResult(View container, int snackbarTitleId, final String path) {
+        final Context context = container.getContext();
+        Snackbar snackbar = Snackbar.make(container, snackbarTitleId, Snackbar.LENGTH_SHORT);
+        if (!TextUtils.isEmpty(path)) {
+            snackbar.setAction(R.string.label_menu_share, new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Uri uri = Uri.fromFile(new File(path));
+                    Intent share = new Intent(Intent.ACTION_SEND);
+                    share.putExtra(Intent.EXTRA_STREAM, uri);
+                    share.setType("image/*");
+                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    context.startActivity(Intent.createChooser(share, null));
+                    TelemetryWrapper.shareCaptureImage(true);
+                }
+            });
+        }
+        snackbar.show();
     }
 
     @Override
@@ -641,6 +604,19 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
                     }
                     onNotified(null, TYPE.OPEN_URL, url);
                 }
+            }
+        } else if (requestCode == ScreenshotIntent.REQUEST_CODE) {
+            View container = findViewById(R.id.container);
+            if (container == null) {
+                return;
+            }
+
+            if (ScreenshotIntent.RESULT_SUCCESS == resultCode) {
+                promptScreenshotResult(container, R.string.screenshot_saved, ScreenshotIntent.parseFilePath(data));
+            } else if (ScreenshotIntent.RESULT_FAIL == resultCode) {
+                promptScreenshotResult(container, R.string.screenshot_failed, null);
+            } else {
+                throw new IllegalArgumentException("unknown result code: " + resultCode);
             }
         }
     }

@@ -5,6 +5,7 @@
 
 package org.mozilla.focus;
 
+import android.app.Activity;
 import android.os.StrictMode;
 import android.preference.PreferenceManager;
 
@@ -12,12 +13,18 @@ import org.mozilla.focus.download.DownloadInfoManager;
 import org.mozilla.focus.history.BrowsingHistoryManager;
 import org.mozilla.focus.locale.LocaleAwareApplication;
 import org.mozilla.focus.screenshot.ScreenshotManager;
+import org.mozilla.focus.screenshot.ScreenshotStubActivity;
 import org.mozilla.focus.search.SearchEngineManager;
 import org.mozilla.focus.telemetry.TelemetryWrapper;
 import org.mozilla.focus.utils.AdjustHelper;
 import org.mozilla.focus.utils.AppConstants;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class FocusApplication extends LocaleAwareApplication {
+
+    private Set<Activity> foregroundActivityTracker = new HashSet<>();
 
     @Override
     public void onCreate() {
@@ -59,5 +66,22 @@ public class FocusApplication extends LocaleAwareApplication {
 
         StrictMode.setThreadPolicy(threadPolicyBuilder.build());
         StrictMode.setVmPolicy(vmPolicyBuilder.build());
+    }
+
+    public boolean isCaptureing() {
+        for (Activity activity : foregroundActivityTracker) {
+            if (activity instanceof ScreenshotStubActivity) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void activityCreated(Activity activity) {
+        foregroundActivityTracker.add(activity);
+    }
+
+    public void activityDestroyed(Activity activity) {
+        foregroundActivityTracker.remove(activity);
     }
 }
