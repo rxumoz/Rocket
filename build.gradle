@@ -3,23 +3,31 @@
 buildscript {
     repositories {
         jcenter()
-        maven { url "https://maven.google.com" }
+        google()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.3.3'
+        classpath 'com.android.tools.build:gradle:3.0.0'
         classpath 'com.dicedmelon.gradle:jacoco-android:0.1.1'
-        classpath 'com.google.gms:oss-licenses:0.9.0'
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
+        classpath 'com.google.gms:oss-licenses:0.9.1'
     }
 }
 
 allprojects {
     repositories {
         jcenter()
+        google()
     }
 }
 
 task clean(type: Delete) {
     delete rootProject.buildDir
+}
+
+ext {
+    compileSdkVersion = 27
+    buildToolsVersion = '27.0.1'
+    targetSdkVersion = 27
+
+
+    androidSupportVersion = '27.0.1'
 }
