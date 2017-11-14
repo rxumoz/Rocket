@@ -5,6 +5,7 @@
 
 package org.mozilla.focus.urlinput;
 
+import android.net.TrafficStats;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
@@ -12,6 +13,7 @@ import android.text.TextUtils;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.mozilla.focus.R;
 import org.mozilla.focus.search.SearchEngine;
 import org.mozilla.focus.utils.UrlUtils;
 
@@ -98,6 +100,7 @@ public class UrlInputPresenter implements UrlInputContract.Presenter {
             HttpURLConnection urlConnection = null;
             BufferedReader r = null;
             try {
+                TrafficStats.setThreadStatsTag(R.string.urlbar_hint);
                 urlConnection = (HttpURLConnection) url.openConnection();
                 InputStream in = new BufferedInputStream(urlConnection.getInputStream());
                 r = new BufferedReader(new InputStreamReader(in, "utf-8"));
@@ -113,12 +116,12 @@ public class UrlInputPresenter implements UrlInputContract.Presenter {
                     try {
                         r.close();
                     } catch (Exception e) {
-                        ;
                     }
                 }
                 if (urlConnection != null) {
                     urlConnection.disconnect();
                 }
+                TrafficStats.clearThreadStatsTag();
             }
 
             if (TextUtils.isEmpty(line)) {
