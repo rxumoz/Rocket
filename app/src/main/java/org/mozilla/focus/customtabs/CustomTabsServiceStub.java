@@ -11,7 +11,7 @@ import android.support.customtabs.CustomTabsSessionToken;
 
 import java.util.List;
 
-public class CustomTabsService extends android.support.customtabs.CustomTabsService {
+public class CustomTabsServiceStub extends android.support.customtabs.CustomTabsService {
 
     @Override
     protected boolean warmup(long flags) {
@@ -48,8 +48,4 @@ public class CustomTabsService extends android.support.customtabs.CustomTabsServ
         return 0;
     }
 
-    @Override
-    protected boolean validateRelationship(CustomTabsSessionToken sessionToken, int relation, Uri origin, Bundle extras) {
-        return false;
-    }
 }

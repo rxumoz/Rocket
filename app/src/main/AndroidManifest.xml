@@ -103,7 +103,7 @@
         <!-- Custom Tabs Service is currently not registering the intent-filter before its ready.
              It should also be set to exported=true if you want to turn it on -->
         <service
-            android:name="org.mozilla.focus.customtabs.CustomTabsService"
+            android:name="org.mozilla.focus.customtabs.CustomTabsServiceStub"
             android:enabled="false"
             android:exported="false"
             tools:ignore="ExportedService" />
