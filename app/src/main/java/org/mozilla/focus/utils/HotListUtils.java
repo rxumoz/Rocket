@@ -1,16 +1,8 @@
-/* -*- Mode: Java; c-basic-offset: 4; tab-width: 4; indent-tabs-mode: nil; -*-
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
 package org.mozilla.focus.utils;
 
 import android.content.Context;
 import android.content.res.AssetManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.preference.PreferenceManager;
-import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -27,38 +19,32 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Created by ylai on 2017/8/14.
+ * Created by mozillabeijing on 2017/12/14.
  */
 
-public class TopSitesUtils {
-
-    /** 
-     * get default topsites data from assets and restore it to SharedPreferences
-     * @param context
-     * @return default TopSites Json Array
-     */
-    public static JSONArray getDefaultSitesJsonArrayFromAssets(Context context) {
+public class HotListUtils {
+    public static JSONArray getHotSitesJsonArrayFromAssets(Context context) {
         JSONArray obj = null;
         try {
-            obj = new JSONArray(loadDefaultSitesFromAssets(context));
+            obj = new JSONArray(loadHotSitesFromAssets(context));
             long lastViewTimestampSystem = System.currentTimeMillis();
             for (int i = 0 ; i < obj.length(); i++) {
                 ((JSONObject)obj.get(i)).put("lastViewTimestamp",lastViewTimestampSystem);
             }
-            saveDefaultSites(context, obj);
+            //saveDefaultSites(context, obj);
         } catch (JSONException e) {
             e.printStackTrace();
         }
         return obj;
     }
 
-    private static String loadDefaultSitesFromAssets(Context context) {
+    private static String loadHotSitesFromAssets(Context context) {
         String json = "[]";
         try {
             final Locale locale = Locale.getDefault();
-            final String fileName = "topsites.json";
+            final String fileName = "hotlist.json";
             final String localPath = "topsites/" + Locales.getLanguage(locale);
-            final String defaultPath = "topsites/topsites_default.json";
+            final String defaultPath = "topsites/hotlist_default.json";
 
             final AssetManager assetManager = context.getAssets();
             final List<String> localFiles = Arrays.asList(assetManager.list(localPath));
@@ -82,7 +68,7 @@ public class TopSitesUtils {
         }
     }
 
-    public static void saveDefaultSites(Context context, JSONArray obj) {
+    /*public static void saveDefaultSites(Context context, JSONArray obj) {
         if (context == null) {
             return;
         }
@@ -90,22 +76,7 @@ public class TopSitesUtils {
                 .edit()
                 .putString(HomeFragment.TOPSITES_PREF, obj.toString())
                 .apply();
-    }
-
-    public static Bitmap getIconFromAssets(Context context, String fileName) {
-        AssetManager assetManager = context.getAssets();
-
-        InputStream istream;
-        Bitmap bitmap = null;
-        try {
-            istream = assetManager.open("topsites/icon/"+fileName);
-            bitmap = BitmapFactory.decodeStream(istream);
-        } catch (IOException e) {
-            // handle exception
-        }
-
-        return bitmap;
-    }
+    }*/
 
     public static List<Site> paresJsonToList(Context context, JSONArray jsonArray) {
         List<Site> defaultSites = new ArrayList<>();
