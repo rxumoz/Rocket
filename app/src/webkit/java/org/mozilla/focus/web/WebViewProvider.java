@@ -26,9 +26,6 @@ import org.mozilla.focus.webkit.WebkitView;
  * WebViewProvider for creating a WebKit based IWebVIew implementation.
  */
 public class WebViewProvider {
-
-    private static String userAgentString = null;
-
     /**
      * Preload webview data. This allows the webview implementation to load resources and other data
      * it might need, in advance of intialising the view (at which time we are probably wanting to
@@ -77,7 +74,9 @@ public class WebViewProvider {
         settings.setAllowFileAccess(false);
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
-        settings.setUserAgentString(getUserAgentString(context));
+
+        final String appName = context.getResources().getString(R.string.useragent_appname);
+        settings.setUserAgentString(buildUserAgentString(context, settings, appName));
 
         // Right now I do not know why we should allow loading content from a content provider
         settings.setAllowContentAccess(false);
@@ -111,8 +110,7 @@ public class WebViewProvider {
     /**
      * Build the browser specific portion of the UA String, based on the webview's existing UA String.
      */
-    @VisibleForTesting
-    static String getUABrowserString(final String existingUAString, final String focusToken) {
+    @VisibleForTesting static String getUABrowserString(final String existingUAString, final String focusToken) {
         // Use the default WebView agent string here for everything after the platform, but insert
         // Focus in front of Chrome.
         // E.g. a default webview UA string might be:
@@ -146,13 +144,7 @@ public class WebViewProvider {
         return TextUtils.join(" ", tokens) + " " + focusToken;
     }
 
-    // Warning: WebSettings.getDefaultUserAgent() is a heavy function which runs for 120ms+ on my pixel
-    private static String buildUserAgentString(final Context context, final String appName) {
-        return buildUserAgentString(context, WebSettings.getDefaultUserAgent(context), appName);
-    }
-
-    @VisibleForTesting
-    static String buildUserAgentString(final Context context, final String existingWebViewUA, final String appName) {
+    @VisibleForTesting static String buildUserAgentString(final Context context, final WebSettings settings, final String appName) {
         final StringBuilder uaBuilder = new StringBuilder();
 
         uaBuilder.append("Mozilla/5.0");
@@ -164,6 +156,8 @@ public class WebViewProvider {
         // so we skip that too.
         uaBuilder.append(" (Linux; Android ").append(Build.VERSION.RELEASE).append("; rv) ");
 
+        final String existingWebViewUA = settings.getUserAgentString();
+
         final String appVersion;
         try {
             appVersion = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
@@ -174,14 +168,7 @@ public class WebViewProvider {
 
         final String focusToken = appName + "/" + appVersion;
         uaBuilder.append(getUABrowserString(existingWebViewUA, focusToken));
-        return uaBuilder.toString();
-    }
 
-    // We're caching the ua since buildUserAgentString is pretty heavy.
-    public static String getUserAgentString(Context context) {
-        if (userAgentString == null) {
-            userAgentString = buildUserAgentString(context, context.getResources().getString(R.string.useragent_appname));
-        }
-        return userAgentString;
+        return uaBuilder.toString();
     }
 }

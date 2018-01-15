@@ -12,18 +12,21 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Parcelable;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.design.widget.BottomSheetDialog;
 import android.support.design.widget.Snackbar;
-import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.Fragment;
+import android.support.v4.content.ContextCompat;
 import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -40,8 +43,6 @@ import org.mozilla.focus.fragment.ListPanelDialog;
 import org.mozilla.focus.fragment.ScreenCaptureDialogFragment;
 import org.mozilla.focus.home.HomeFragment;
 import org.mozilla.focus.locale.LocaleAwareAppCompatActivity;
-import org.mozilla.focus.permission.PermissionHandle;
-import org.mozilla.focus.permission.PermissionHandler;
 import org.mozilla.focus.screenshot.ScreenshotCaptureTask;
 import org.mozilla.focus.screenshot.ScreenshotGridFragment;
 import org.mozilla.focus.screenshot.ScreenshotViewerActivity;
@@ -62,13 +63,13 @@ import org.mozilla.focus.web.WebViewProvider;
 import org.mozilla.focus.widget.FragmentListener;
 
 import java.io.File;
-import java.io.Serializable;
 import java.lang.ref.WeakReference;
 import java.util.List;
 
-public class MainActivity extends LocaleAwareAppCompatActivity implements FragmentListener, SharedPreferences.OnSharedPreferenceChangeListener {
+public class MainActivity extends LocaleAwareAppCompatActivity implements FragmentListener,SharedPreferences.OnSharedPreferenceChangeListener{
 
     public static final String EXTRA_TEXT_SELECTION = "text_selection";
+    private static int REQUEST_CODE_STORAGE_PERMISSION = 101;
     private static final Handler HANDLER = new Handler();
 
     private String pendingUrl;
@@ -89,9 +90,6 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
     private BroadcastReceiver uiMessageReceiver;
     private static boolean sIsNewCreated = true;
 
-    private PermissionHandler permissionHandler;
-    private static final int ACTION_CAPTURE = 0;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -103,74 +101,6 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
         initBroadcastReceivers();
 
         mediator = new MainMediator(this);
-        permissionHandler = new PermissionHandler(new PermissionHandle() {
-            @Override
-            public void doActionDirect(String permission, int actionId, Parcelable params) {
-                if (actionId == ACTION_CAPTURE) {
-                    BrowserFragment browserFragment = getBrowserFragment();
-                    if (browserFragment == null || !browserFragment.isVisible()) {
-                        return;
-                    }
-                    showLoadingAndCapture(browserFragment);
-                }
-            }
-
-            private void doCaptureGranted() {
-                BrowserFragment browserFragment = getBrowserFragment();
-                if (browserFragment == null || !browserFragment.isVisible()) {
-                    return;
-                }
-                hasPendingScreenCaptureTask = true;
-            }
-
-            @Override
-            public void doActionGranted(String permission, int actionId, Parcelable params) {
-                if (actionId == ACTION_CAPTURE) {
-                    doCaptureGranted();
-                }
-            }
-
-            @Override
-            public void doActionSetting(String permission, int actionId, Parcelable params) {
-                if (actionId == ACTION_CAPTURE) {
-                    doCaptureGranted();
-                }
-            }
-
-            @Override
-            public void doActionNoPermission(String permission, int actionId, Parcelable params) {
-                // Do nothing
-            }
-
-            @Override
-            public int getDoNotAskAgainDialogString(int actionId) {
-                if (actionId == ACTION_CAPTURE ) {
-                    return R.string.permission_dialog_msg_storage;
-                } else {
-                    throw new IllegalArgumentException("Unknown Action");
-                }
-            }
-
-            @Override
-            public Snackbar makeAskAgainSnackBar(int actionId) {
-                return PermissionHandler.makeAskAgainSnackBar(MainActivity.this, findViewById(R.id.container), getAskAgainSnackBarString(actionId));
-            }
-
-            private int getAskAgainSnackBarString(int actionId) {
-                if (actionId == ACTION_CAPTURE ) {
-                    return R.string.permission_toast_storage;
-                } else {
-                    throw new IllegalArgumentException("Unknown Action");
-                }
-            }
-
-            @Override
-            public void requestPermissions(int actionId) {
-                if (actionId == ACTION_CAPTURE) {
-                    ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, actionId);
-                }
-            }
-        });
 
         SafeIntent intent = new SafeIntent(getIntent());
 
@@ -197,29 +127,18 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
         }
         WebViewProvider.preload(this);
 
-        if (sIsNewCreated && (!Settings.getInstance(this).didShowRateAppDialog() || !Settings.getInstance(this).didShowShareAppDialog())) {
+        if(sIsNewCreated && (!Settings.getInstance(this).didShowRateAppDialog() || !Settings.getInstance(this).didShowShareAppDialog())) {
             sIsNewCreated = false;
             Settings.getInstance(this).increaseAppCreateCounter();
-            if (!Settings.getInstance(this).didShowRateAppDialog() && Settings.getInstance(this).getAppCreateCount() >= DialogUtils.APP_CREATE_THRESHOLD_FOR_RATE_APP) {
+            if(!Settings.getInstance(this).didShowRateAppDialog() && Settings.getInstance(this).getAppCreateCount() >= DialogUtils.APP_CREATE_THRESHOLD_FOR_RATE_APP) {
                 DialogUtils.showRateAppDialog(this);
                 TelemetryWrapper.showFeedbackDialog();
-            } else if (!Settings.getInstance(this).didShowShareAppDialog() && Settings.getInstance(this).getAppCreateCount() >= DialogUtils.APP_CREATE_THRESHOLD_FOR_SHARE_APP) {
+            } else if(!Settings.getInstance(this).didShowShareAppDialog() && Settings.getInstance(this).getAppCreateCount() >= DialogUtils.APP_CREATE_THRESHOLD_FOR_SHARE_APP) {
                 DialogUtils.showShareAppDialog(this);
                 TelemetryWrapper.showPromoteShareDialog();
             }
         }
 
-    }
-
-    @Override
-    public void onRestoreInstanceState(Bundle savedInstanceState) {
-        permissionHandler.onRestoreInstanceState(savedInstanceState);
-    }
-
-    @Override
-    public void onSaveInstanceState(Bundle outState) {
-        permissionHandler.onSaveInstanceState(outState);
-        super.onSaveInstanceState(outState);
     }
 
     private void initBroadcastReceivers() {
@@ -279,7 +198,7 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
     protected void onPostResume() {
         super.onPostResume();
         safeForFragmentTransactions = true;
-        if (hasPendingScreenCaptureTask) {
+        if(hasPendingScreenCaptureTask) {
             final BrowserFragment browserFragment = getBrowserFragment();
             if (browserFragment != null && browserFragment.isVisible()) {
                 showLoadingAndCapture(browserFragment);
@@ -315,8 +234,6 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
             // We can't update our fragment right now because we need to wait until the activity is
             // resumed. So just remember this URL and load it in onResumeFragments().
             pendingUrl = intent.getDataString();
-            // We don't want to see any menu is visible when processing open url request from Intent.ACTION_VIEW
-            dismissAllMenus();
         }
 
         // We do not care about the previous intent anymore. But let's remember this one.
@@ -416,22 +333,9 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
         mDialogFragment = dialogFragment;
     }
 
-    private void dismissAllMenus() {
-        if (menu != null) {
-            menu.dismiss();
-        }
-        BrowserFragment browserFragment = getVisibleBrowserFragment();
-        if (browserFragment != null) {
-            browserFragment.dismissWebContextMenu();
-        }
-        if (mDialogFragment != null) {
-            mDialogFragment.dismissAllowingStateLoss();
-        }
-    }
-
     public void onMenuItemClicked(View v) {
         final int stringResource;
-        if (!v.isEnabled()) {
+        if(!v.isEnabled()) {
             return;
         }
         menu.cancel();
@@ -498,7 +402,7 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
         v.setEnabled(enable);
         if (v instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) v;
-            for (int i = 0; i < vg.getChildCount(); i++) {
+            for(int i=0 ; i < vg.getChildCount() ; i++) {
                 setEnable(((ViewGroup) v).getChildAt(i), enable);
             }
         }
@@ -543,7 +447,7 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
                 break;
             case R.id.capture_page:
                 Settings.getInstance(this).setScreenshotOnBoardingDone();
-                onCapturePageClicked();
+                onCapturePageClicked(browserFragment);
                 TelemetryWrapper.clickToolbarCapture();
                 break;
             default:
@@ -599,27 +503,36 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
         browserFragment.stop();
     }
 
-    private void onCapturePageClicked() {
-        permissionHandler.tryAction(this, Manifest.permission.WRITE_EXTERNAL_STORAGE, ACTION_CAPTURE, null);
+    private void onCapturePageClicked(final BrowserFragment browserFragment) {
+        if (PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            // We do have the permission to write to the external storage.
+            showLoadingAndCapture(browserFragment);
+        } else {
+            // We do not have the permission to write to the external storage. Request the permission and start the
+            // capture from onRequestPermissionsResult().
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CODE_STORAGE_PERMISSION);
+            }
+        }
     }
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
         // Only refresh when disabling turbo mode
-        if (this.getResources().getString(R.string.pref_key_turbo_mode).equals(key)) {
+        if (this.getResources().getString(R.string.pref_key_turbo_mode).equals(key)){
             final boolean turboEnabled = isTurboEnabled();
             BrowserFragment browserFragment = getVisibleBrowserFragment();
             if (browserFragment != null) {
                 browserFragment.setBlockingEnabled(turboEnabled);
                 // Reload if we're closing Turbo mode since we should be fixing something
-                if (!turboEnabled) {
+                if(!turboEnabled) {
                     browserFragment.reload();
                 }
             }
             menu.findViewById(R.id.menu_turbomode).setSelected(turboEnabled);
         } else if (this.getResources().getString(R.string.pref_key_performance_block_images).equals(key)) {
             final boolean blockingImages = isBlockingImages();
-            if (getVisibleBrowserFragment() != null) {
+            if (getVisibleBrowserFragment() != null){
                 getVisibleBrowserFragment().reload();
             }
             menu.findViewById(R.id.menu_blockimg).setSelected(blockingImages);
@@ -648,7 +561,7 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
             if (browserFragment == null) {
                 return;
             }
-            if (browserFragment.capturePage(this)) {
+            if(browserFragment.capturePage(this)){
                 //  onCaptureComplete called
             } else {
                 //  Capture failed
@@ -691,9 +604,9 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
             }
         }
 
-        private void promptScreenshotResult(int snackbarTitleId) {
+        private void promptScreenshotResult(int snackbarTitleId){
             Context context = refContext.get();
-            if (context == null) {
+            if(context == null){
                 return;
             }
             Toast.makeText(context, snackbarTitleId, Toast.LENGTH_SHORT).show();
@@ -717,28 +630,35 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        permissionHandler.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_STORAGE_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                final BrowserFragment browserFragment = getBrowserFragment();
+                if (browserFragment == null || !browserFragment.isVisible()) {
+                    return;
+                }
+                hasPendingScreenCaptureTask = true;
+            }
+        }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        permissionHandler.onActivityResult(this, requestCode, resultCode, data);
 
-        if (requestCode == ScreenshotViewerActivity.REQ_CODE_VIEW_SCREENSHOT) {
-            if (resultCode == ScreenshotViewerActivity.RESULT_NOTIFY_SCREENSHOT_IS_DELETED) {
+        if(requestCode == ScreenshotViewerActivity.REQ_CODE_VIEW_SCREENSHOT) {
+            if(resultCode == ScreenshotViewerActivity.RESULT_NOTIFY_SCREENSHOT_IS_DELETED) {
                 Toast.makeText(this, R.string.message_deleted_screenshot, Toast.LENGTH_SHORT).show();
-                if (mDialogFragment != null) {
+                if(mDialogFragment != null) {
                     Fragment fragment = mDialogFragment.getChildFragmentManager().findFragmentById(R.id.main_content);
                     if (fragment instanceof ScreenshotGridFragment && data != null) {
                         long id = data.getLongExtra(ScreenshotViewerActivity.EXTRA_SCREENSHOT_ITEM_ID, -1);
                         ((ScreenshotGridFragment) fragment).notifyItemDelete(id);
                     }
                 }
-            } else if (resultCode == ScreenshotViewerActivity.RESULT_OPEN_URL) {
-                if (data != null) {
+            } else if(resultCode == ScreenshotViewerActivity.RESULT_OPEN_URL) {
+                if(data != null) {
                     String url = data.getStringExtra(ScreenshotViewerActivity.EXTRA_URL);
-                    if (mDialogFragment != null) {
+                    if(mDialogFragment != null) {
                         mDialogFragment.dismiss();
                     }
                     onNotified(null, TYPE.OPEN_URL, url);
@@ -910,7 +830,20 @@ public class MainActivity extends LocaleAwareAppCompatActivity implements Fragme
                             .setAction(R.string.open, new View.OnClickListener() {
                                 @Override
                                 public void onClick(View view) {
-                                    IntentUtils.intentOpenFile(MainActivity.this, downloadInfo.getFileUri(), downloadInfo.getMimeType());
+                                    if (TextUtils.isEmpty(downloadInfo.getMediaUri())) {
+                                        MediaScannerConnection.scanFile(MainActivity.this,
+                                                new String[]{Uri.parse(downloadInfo.getFileUri()).getPath()},
+                                                new String[]{downloadInfo.getMimeType()},
+                                                new MediaScannerConnection.OnScanCompletedListener() {
+
+                                                    @Override
+                                                    public void onScanCompleted(String path, Uri uri) {
+                                                        IntentUtils.intentOpenFile(MainActivity.this, path, downloadInfo.getMimeType());
+                                                    }
+                                                });
+                                    } else {
+                                        IntentUtils.intentOpenFile(view.getContext(), downloadInfo.getFileUri(), downloadInfo.getMimeType());
+                                    }
                                 }
                             })
                             .show();

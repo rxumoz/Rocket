@@ -31,14 +31,12 @@ public class UrlInputPresenter implements UrlInputContract.Presenter {
 
     private UrlInputContract.View view;
     final private SearchEngine searchEngine;
-    final private String userAgent;
     private static final int MAX_SUGGESTION_COUNT = 5;
 
     private AsyncTask queryTask;
 
-    public UrlInputPresenter(@NonNull SearchEngine searchEngine, String userAgent) {
+    public UrlInputPresenter(@NonNull SearchEngine searchEngine) {
         this.searchEngine = searchEngine;
-        this.userAgent = userAgent;
     }
 
     @Override
@@ -75,12 +73,12 @@ public class UrlInputPresenter implements UrlInputContract.Presenter {
             queryTask = new AsyncTask<URL, Void, List<CharSequence>>() {
                 @Override
                 protected List<CharSequence> doInBackground(URL... urls) {
-                    return HttpRequest.get(urls[0], userAgent);
+                    return HttpRequest.get(urls[0]);
                 }
 
                 @Override
                 protected void onPostExecute(List<CharSequence> strings) {
-                    if (view != null) {
+                    if(view != null){
                         view.setSuggestions(strings);
                     }
                 }
@@ -94,14 +92,13 @@ public class UrlInputPresenter implements UrlInputContract.Presenter {
 
     private static class HttpRequest {
 
-        static List<CharSequence> get(URL url, final String userAgent) {
+        static List<CharSequence> get(URL url) {
 
             String line = "";
             HttpURLConnection urlConnection = null;
             BufferedReader r = null;
             try {
                 urlConnection = (HttpURLConnection) url.openConnection();
-                urlConnection.setRequestProperty("User-Agent", userAgent);
                 InputStream in = new BufferedInputStream(urlConnection.getInputStream());
                 r = new BufferedReader(new InputStreamReader(in, "utf-8"));
                 StringBuilder total = new StringBuilder();

@@ -7,7 +7,6 @@ package org.mozilla.focus.fragment;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.Dialog;
 import android.app.DownloadManager;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -23,11 +22,9 @@ import android.graphics.drawable.TransitionDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.design.widget.AppBarLayout;
-import android.support.design.widget.Snackbar;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AlertDialog;
@@ -54,12 +51,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import org.mozilla.focus.R;
-import org.mozilla.focus.activity.MainActivity;
 import org.mozilla.focus.download.DownloadInfo;
 import org.mozilla.focus.download.DownloadInfoManager;
 import org.mozilla.focus.menu.WebContextMenu;
-import org.mozilla.focus.permission.PermissionHandle;
-import org.mozilla.focus.permission.PermissionHandler;
 import org.mozilla.focus.screenshot.ScreenshotObserver;
 import org.mozilla.focus.telemetry.TelemetryWrapper;
 import org.mozilla.focus.utils.ColorUtils;
@@ -88,17 +82,16 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
     public static final String FRAGMENT_TAG = "browser";
 
     private static int REQUEST_CODE_READ_STORAGE_PERMISSION = 100;
+    private static int REQUEST_CODE_WRITE_STORAGE_PERMISSION = 101;
     private static int REQUEST_CODE_LOCATION_PERMISSION = 102;
     private static int REQUEST_CODE_CHOOSE_FILE = 103;
 
     private static final int ANIMATION_DURATION = 300;
     private static final String ARGUMENT_URL = "url";
+    private static final String RESTORE_KEY_DOWNLOAD = "download";
 
     private static final int SITE_GLOBE = 0;
     private static final int SITE_LOCK = 1;
-
-    private final static int NONE = -1;
-    private int systemVisibility = NONE;
 
     private String firstLoadingUrlAfterResumed = null;
 
@@ -112,12 +105,12 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
         return fragment;
     }
 
+    private Download pendingDownload;
     private View backgroundView;
     private TransitionDrawable backgroundTransition;
     private TextView urlView;
     private AnimatedProgressBar progressView;
     private ImageView siteIdentity;
-    private Dialog webContextMenu;
 
     //GeoLocationPermission
     private String geolocationOrigin;
@@ -146,167 +139,10 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
     private ScreenshotObserver screenshotObserver;
 
-    private PermissionHandler permissionHandler;
-    private static final int ACTION_DOWNLOAD = 0;
-    private static final int ACTION_PICK_FILE = 1;
-    private static final int ACTION_GEO_LOCATION = 2;
-
-
-    @Override
-    public void onViewStateRestored (Bundle savedInstanceState) {
-        super.onViewStateRestored(savedInstanceState);
-        if (savedInstanceState != null) {
-            permissionHandler.onRestoreInstanceState(savedInstanceState);
-        }
-    }
-
-    @Override
-    public void onAttach (Context context) {
-        super.onAttach(context);
-            permissionHandler = new PermissionHandler(new PermissionHandle() {
-                @Override
-                public void doActionDirect(String permission, int actionId, Parcelable params) {
-                    switch (actionId) {
-                        case ACTION_DOWNLOAD:
-                            if (getContext() == null) {
-                                Log.w(FRAGMENT_TAG, "No context to use, abort callback onDownloadStart");
-                                return;
-                            }
-
-                            Download download = (Download) params;
-
-                            if (PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(getContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                                // We do have the permission to write to the external storage. Proceed with the download.
-                                queueDownload(download);
-                            }
-                        break;
-                        case ACTION_PICK_FILE:
-                            fileChooseAction.startChooserActivity();
-                            break;
-                        case ACTION_GEO_LOCATION:
-                            showGeolocationPermissionPrompt();
-                            break;
-                        default:
-                            throw new IllegalArgumentException("Unknown actionId");
-                    }
-                }
-
-                private void actionDownloadGranted(Parcelable parcelable) {
-                    Download download = (Download) parcelable;
-                    queueDownload(download);
-                }
-
-                private void actionPickFileGranted() {
-                    if (fileChooseAction != null) {
-                        fileChooseAction.onPermissionGranted();
-                    }
-                }
-
-                @Override
-                public void doActionGranted(String permission, int actionId, Parcelable params) {
-                    switch (actionId) {
-                        case ACTION_DOWNLOAD:
-                            actionDownloadGranted(params);
-                            break;
-                        case ACTION_PICK_FILE:
-                            actionPickFileGranted();
-                            break;
-                        case ACTION_GEO_LOCATION:
-                            showGeolocationPermissionPrompt();
-                            break;
-                        default:
-                            throw new IllegalArgumentException("Unknown actionId");
-                    }
-                }
-
-                @Override
-                public void doActionSetting(String permission, int actionId, Parcelable params) {
-                    switch (actionId) {
-                        case ACTION_DOWNLOAD:
-                            actionDownloadGranted(params);
-                            break;
-                        case ACTION_PICK_FILE:
-                            actionPickFileGranted();
-                            break;
-                        case ACTION_GEO_LOCATION:
-                            showGeolocationPermissionPrompt();
-                            break;
-                        default:
-                            throw new IllegalArgumentException("Unknown actionId");
-                    }
-                }
-
-                @Override
-                public void doActionNoPermission(String permission, int actionId, Parcelable params) {
-                    switch (actionId) {
-                        case ACTION_DOWNLOAD:
-                            // Do nothing
-                            break;
-                        case ACTION_PICK_FILE:
-                            if (fileChooseAction != null) {
-                                fileChooseAction.cancel();
-                                fileChooseAction = null;
-                            }
-                            break;
-                        case ACTION_GEO_LOCATION:
-                            if (geolocationCallback != null) {
-                                rejectGeoRequest();
-                            }
-                            break;
-                        default:
-                            throw new IllegalArgumentException("Unknown actionId");
-                    }
-                }
-
-                @Override
-                public int getDoNotAskAgainDialogString(int actionId) {
-                    if (actionId == ACTION_DOWNLOAD || actionId == ACTION_PICK_FILE) {
-                        return R.string.permission_dialog_msg_storage;
-                    } else if (actionId == ACTION_GEO_LOCATION) {
-                        return R.string.permission_dialog_msg_location;
-                    } else {
-                        throw new IllegalArgumentException("Unknown Action");
-                    }
-                }
-
-                @Override
-                public Snackbar makeAskAgainSnackBar(int actionId) {
-                    return PermissionHandler.makeAskAgainSnackBar(BrowserFragment.this, getActivity().findViewById(R.id.container), getAskAgainSnackBarString(actionId));
-                }
-
-                private int getAskAgainSnackBarString(int actionId) {
-                    if (actionId == ACTION_DOWNLOAD || actionId == ACTION_PICK_FILE) {
-                        return R.string.permission_toast_storage;
-                    } else if (actionId == ACTION_GEO_LOCATION) {
-                        return R.string.permission_toast_location;
-                    } else {
-                        throw new IllegalArgumentException("Unknown Action");
-                    }
-                }
-
-                @Override
-                public void requestPermissions(int actionId) {
-                    switch (actionId) {
-                        case ACTION_DOWNLOAD:
-                            BrowserFragment.this.requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, actionId);
-                            break;
-                        case ACTION_PICK_FILE:
-                            BrowserFragment.this.requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, actionId);
-                            break;
-                        case ACTION_GEO_LOCATION:
-                            BrowserFragment.this.requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, actionId);
-                            break;
-                        default:
-                            throw new IllegalArgumentException("Unknown Action");
-                    }
-                }
-            });
-    }
-
     @Override
     public void onPause() {
         super.onPause();
-        if (screenshotObserver != null) {
+        if(screenshotObserver != null) {
             screenshotObserver.stop();
         }
     }
@@ -314,7 +150,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
     @Override
     public void onResume() {
         super.onResume();
-        if (Settings.getInstance(getActivity()).shouldShowScreenshotOnBoarding()) {
+        if(Settings.getInstance(getActivity()).shouldShowScreenshotOnBoarding()) {
             screenshotObserver = new ScreenshotObserver(getActivity(), this);
             screenshotObserver.start();
         }
@@ -326,15 +162,21 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
     }
 
     private void updateURL(final String url) {
-        if (UrlUtils.isInternalErrorURL(url)) {
+        if (UrlUtils.isInternalErrorURL(url)){
             return;
         }
-
+        
         urlView.setText(UrlUtils.stripUserInfo(url));
     }
 
     @Override
     public View inflateLayout(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        if (savedInstanceState != null && savedInstanceState.containsKey(RESTORE_KEY_DOWNLOAD)) {
+            // If this activity was destroyed before we could start a download (e.g. because we were waiting for a permission)
+            // then restore the download object.
+            pendingDownload = savedInstanceState.getParcelable(RESTORE_KEY_DOWNLOAD);
+        }
+
         final View view = inflater.inflate(R.layout.fragment_browser, container, false);
 
         videoContainer = (ViewGroup) view.findViewById(R.id.video_container);
@@ -373,7 +215,6 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        permissionHandler.onActivityResult(getActivity(), requestCode, resultCode, data);
         if (requestCode == REQUEST_CODE_CHOOSE_FILE) {
             final boolean done = (fileChooseAction == null) || fileChooseAction.onFileChose(resultCode, data);
             if (done) {
@@ -451,8 +292,13 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
     @Override
     public void onSaveInstanceState(Bundle outState) {
-        permissionHandler.onSaveInstanceState(outState);
         super.onSaveInstanceState(outState);
+
+        if (pendingDownload != null) {
+            // We were not able to start this download yet (waiting for a permission). Save this download
+            // so that we can start it once we get restored and receive the permission.
+            outState.putParcelable(RESTORE_KEY_DOWNLOAD, pendingDownload);
+        }
     }
 
     @Override
@@ -463,10 +309,6 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
     @Override
     public void onStop() {
-        IWebView webView = getWebView();
-        if (webView != null && systemVisibility != NONE) {
-            webView.performExitFullScreen();
-        }
         super.onStop();
         notifyParent(FragmentListener.TYPE.FRAGMENT_STOPPED, FRAGMENT_TAG);
     }
@@ -501,6 +343,8 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
     public IWebView.Callback createCallback() {
         return new IWebView.Callback() {
             String failingUrl;
+            private final static int NONE = -1;
+            private int systemVisibility = NONE;
             private boolean mostOldCallbacksHaveFinished = false;
             // Some url may have two onPageFinished for the same url. filter them out to avoid
             // adding twice to the history.
@@ -536,7 +380,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
             private void updateUrlFromWebView() {
                 final IWebView webView = getWebView();
-                if (webView != null) {
+                if(webView != null) {
                     final String viewURL = webView.getUrl();
                     onURLChanged(viewURL);
                 }
@@ -544,7 +388,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
             @Override
             public void onPageFinished(boolean isSecure) {
-                if (!mostOldCallbacksHaveFinished) {
+                if(!mostOldCallbacksHaveFinished) {
                     return;
                 }
                 // The URL which is supplied in onPageFinished() could be fake (see #301), but webview's
@@ -561,7 +405,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
                     siteIdentity.setImageLevel(SITE_LOCK);
                 }
                 String urlToBeInserted = getUrl();
-                if (!getUrl().equals(this.failingUrl) && !urlToBeInserted.equals(lastInsertedUrl) && getWebView() != null) {
+                if (!getUrl().equals(this.failingUrl) && !urlToBeInserted.equals(lastInsertedUrl) && getWebView()!=null) {
                     getWebView().insertBrowsingHistory();
                     lastInsertedUrl = urlToBeInserted;
                 }
@@ -574,7 +418,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
             @Override
             public void onProgress(int progress) {
-                if (!mostOldCallbacksHaveFinished) {
+                if(!mostOldCallbacksHaveFinished) {
                     return;
                 }
                 final IWebView webView = getWebView();
@@ -613,7 +457,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
                     return;
                 }
 
-                webContextMenu = WebContextMenu.show(getActivity(), this, hitTarget);
+                WebContextMenu.show(getActivity(), this, hitTarget);
             }
 
             @Override
@@ -669,14 +513,28 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
             @Override
             public void onDownloadStart(Download download) {
-                permissionHandler.tryAction(BrowserFragment.this, Manifest.permission.WRITE_EXTERNAL_STORAGE, ACTION_DOWNLOAD, download);
+                if (getContext() == null) {
+                    Log.w(FRAGMENT_TAG, "No context to use, abort callback onDownloadStart");
+                    return;
+                }
+
+                if (PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(getContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                    // We do have the permission to write to the external storage. Proceed with the download.
+                    queueDownload(download);
+                } else {
+                    // We do not have the permission to write to the external storage. Request the permission and start the
+                    // download from onRequestPermissionsResult().
+                    pendingDownload = download;
+                    requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CODE_WRITE_STORAGE_PERMISSION);
+                }
             }
 
             @Override
             public void onGeolocationPermissionsShowPrompt(final String origin, final GeolocationPermissions.Callback callback) {
                 geolocationOrigin = origin;
                 geolocationCallback = callback;
-                permissionHandler.tryAction(BrowserFragment.this, Manifest.permission.ACCESS_FINE_LOCATION, ACTION_GEO_LOCATION, null);
+                //show geolocation permission prompt
+                showGeolocationPermissionPrompt(geolocationOrigin, geolocationCallback);
             }
 
             @Override
@@ -696,7 +554,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
             @Override
             public void updateFailingUrl(String url, boolean updateFromError) {
-                if (!updateFromError && !url.equals(failingUrl)) {
+                if( !updateFromError && !url.equals(failingUrl)) {
                     failingUrl = null;
                 } else {
                     this.failingUrl = url;
@@ -709,7 +567,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
             // See issue1064 and issue1150.
             @Override
             public void onReceivedTitle(WebView view, String title) {
-                if (!mostOldCallbacksHaveFinished) {
+                if(!mostOldCallbacksHaveFinished) {
                     return;
                 }
 
@@ -758,7 +616,36 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        permissionHandler.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_WRITE_STORAGE_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                queueDownload(pendingDownload);
+            }
+
+            pendingDownload = null;
+            return;
+        } else if (requestCode == REQUEST_CODE_LOCATION_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                geolocationCallback.invoke(geolocationOrigin, true, false);
+            } else {
+                geolocationCallback.invoke(geolocationOrigin, false, false);
+            }
+            geolocationOrigin = "";
+            geolocationCallback = null;
+            return;
+        } else if (requestCode == REQUEST_CODE_READ_STORAGE_PERMISSION) {
+            if (fileChooseAction != null) {
+                final boolean granted = (grantResults.length > 0)
+                        && (grantResults[0] == PackageManager.PERMISSION_GRANTED);
+                if (granted) {
+                    fileChooseAction.onPermissionGranted();
+                } else {
+                    fileChooseAction.cancel();
+                    fileChooseAction = null;
+                }
+            }
+
+        }
+
     }
 
     /**
@@ -792,7 +679,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
         }
 
         // block non-http/https download links
-        if (!URLUtil.isNetworkUrl(download.getUrl())) {
+        if(!URLUtil.isNetworkUrl(download.getUrl())) {
             Toast.makeText(getContext(), R.string.download_file_not_supported, Toast.LENGTH_LONG).show();
             return;
         }
@@ -826,7 +713,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
             DownloadInfoManager.getInstance().queryByDownloadId(downloadId, new DownloadInfoManager.AsyncQueryListener() {
                 @Override
                 public void onQueryComplete(List downloadInfoList) {
-                    if (!downloadInfoList.isEmpty()) {
+                    if(!downloadInfoList.isEmpty()) {
                         DownloadInfo info = (DownloadInfo) downloadInfoList.get(0);
                         DownloadInfoManager.getInstance().delete(info.getRowId(), null);
                         DownloadInfoManager.getInstance().insert(info, new DownloadInfoManager.AsyncInsertListener() {
@@ -853,49 +740,30 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
     /*
      * show webview geolocation permission prompt
      */
-    private void showGeolocationPermissionPrompt() {
-        if (geolocationCallback == null) {
-            return;
-        }
+    private void showGeolocationPermissionPrompt(final String origin, final GeolocationPermissions.Callback callback) {
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-        builder.setMessage(getString(R.string.geolocation_dialog_message, geolocationOrigin))
+        builder.setMessage(getString(R.string.geolocation_dialog_message, origin))
                 .setCancelable(true)
                 .setPositiveButton(getString(R.string.geolocation_dialog_allow), new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int id) {
-                        acceptGeoRequest();
+                        //check location permission
+                        if (PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)) {
+                            callback.invoke(origin, true, false);
+                            geolocationOrigin = "";
+                            geolocationCallback = null;
+                        } else {
+                            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_CODE_LOCATION_PERMISSION);
+                        }
                     }
-                })
-                .setNegativeButton(getString(R.string.geolocation_dialog_block), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int id) {
-                        rejectGeoRequest();
-                    }
-                })
-                .setOnCancelListener(new DialogInterface.OnCancelListener() {
-                    @Override
-                    public void onCancel(DialogInterface dialog) {
-                        rejectGeoRequest();
-                    }
-                });
+                }).setNegativeButton(getString(R.string.geolocation_dialog_block), new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int id) {
+                callback.invoke(origin, false, false);
+                geolocationOrigin = "";
+                geolocationCallback = null;
+            }
+        });
         AlertDialog alert = builder.create();
         alert.show();
-    }
-
-    private void acceptGeoRequest() {
-        if (geolocationCallback == null) {
-            return;
-        }
-        geolocationCallback.invoke(geolocationOrigin, true, false);
-        geolocationOrigin = "";
-        geolocationCallback = null;
-    }
-
-    private void rejectGeoRequest() {
-        if (geolocationCallback == null) {
-            return;
-        }
-        geolocationCallback.invoke(geolocationOrigin, false, false);
-        geolocationOrigin = "";
-        geolocationCallback = null;
     }
 
     private boolean isStartedFromExternalApp() {
@@ -1070,13 +938,6 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
         return true;
     }
 
-    public void dismissWebContextMenu() {
-        if (webContextMenu != null) {
-            webContextMenu.dismiss();
-            webContextMenu = null;
-        }
-    }
-
     private Bitmap getPageBitmap(WebView webView) {
         DisplayMetrics displaymetrics = new DisplayMetrics();
         getActivity().getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
@@ -1105,7 +966,15 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
         }
 
         public void performAction() {
-            permissionHandler.tryAction(BrowserFragment.this, Manifest.permission.READ_EXTERNAL_STORAGE, ACTION_PICK_FILE, null);
+            // check permission before we pick any file.
+            final int permission = ContextCompat.checkSelfPermission(getContext(),
+                    Manifest.permission.READ_EXTERNAL_STORAGE);
+            if (PackageManager.PERMISSION_GRANTED == permission) {
+                startChooserActivity();
+            } else {
+                requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
+                        REQUEST_CODE_READ_STORAGE_PERMISSION);
+            }
         }
 
         public void onPermissionGranted() {
@@ -1165,7 +1034,7 @@ public class BrowserFragment extends WebFragment implements View.OnClickListener
 
     @Override
     public void onScreenshotTaken(String screenshotPath, String title) {
-        if (screenshotObserver != null) {
+        if(screenshotObserver != null) {
             screenshotObserver.stop();
         }
         notifyParent(FragmentListener.TYPE.SHOW_SCREENSHOT_HINT, null);

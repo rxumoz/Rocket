@@ -4,7 +4,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.focus.utils;
 
-import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -13,7 +12,6 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.support.annotation.StringRes;
-import android.support.v4.app.Fragment;
 import android.support.v4.content.FileProvider;
 import android.support.v7.app.AlertDialog;
 
@@ -39,7 +37,7 @@ public class IntentUtils {
      * URL will be opened in the supplied WebView if appropriate (in which case the URL was handled,
      * and true will also be returned). If not handled, we should  fall back to webviews error handling
      * (which ends up calling our error handling code as needed).
-     * <p>
+     *
      * Note: this method "leaks" the target Uri to Android before asking the user whether they
      * want to use an external app to open the uri. Ultimately the OS can spy on anything we're
      * doing in the app, so this isn't an actual "bug".
@@ -145,22 +143,6 @@ public class IntentUtils {
         builder.show();
     }
 
-    public static void intentOpenSettings(Activity activity, int requestCode) {
-        Intent intent = new Intent();
-        intent.setAction(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-        Uri uri = Uri.fromParts("package", activity.getPackageName(), null);
-        intent.setData(uri);
-        activity.startActivityForResult(intent, requestCode);
-    }
-
-    public static void intentOpenSettings(Fragment fragment, int requestCode) {
-        Intent intent = new Intent();
-        intent.setAction(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-        Uri uri = Uri.fromParts("package", fragment.getActivity().getPackageName(), null);
-        intent.setData(uri);
-        fragment.startActivityForResult(intent, requestCode);
-    }
-
     public static void intentOpenFile(Context context, String fileUriStr, String mimeType) {
         if (fileUriStr != null) {
             String authorities = BuildConfig.APPLICATION_ID + ".provider.fileprovider";
@@ -173,15 +155,15 @@ public class IntentUtils {
 
             try {
                 context.startActivity(launchIntent);
-            } catch (Exception e) {
+            }catch (Exception e){
                 openDownloadPage(context);
             }
-        } else {
+        }else {
             openDownloadPage(context);
         }
     }
 
-    private static void openDownloadPage(Context context) {
+    private static void openDownloadPage(Context context){
         Intent pageView = new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS);
         pageView.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(pageView);

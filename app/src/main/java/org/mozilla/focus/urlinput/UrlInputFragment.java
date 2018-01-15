@@ -23,7 +23,6 @@ import org.mozilla.focus.search.SearchEngineManager;
 import org.mozilla.focus.telemetry.TelemetryWrapper;
 import org.mozilla.focus.utils.UrlUtils;
 import org.mozilla.focus.utils.ViewUtils;
-import org.mozilla.focus.web.WebViewProvider;
 import org.mozilla.focus.widget.FlowLayout;
 import org.mozilla.focus.widget.FragmentListener;
 import org.mozilla.focus.widget.InlineAutocompleteEditText;
@@ -72,9 +71,8 @@ public class UrlInputFragment extends Fragment implements UrlInputContract.View,
     @Override
     public void onCreate(Bundle bundle) {
         super.onCreate(bundle);
-        final String userAgent = WebViewProvider.getUserAgentString(getActivity());
         this.presenter = new UrlInputPresenter(SearchEngineManager.getInstance()
-                .getDefaultSearchEngine(getActivity()), userAgent);
+                .getDefaultSearchEngine(getActivity()));
     }
 
     @Override
@@ -241,11 +239,11 @@ public class UrlInputFragment extends Fragment implements UrlInputContract.View,
             return;
         }
 
-        final String searchKey = urlView.getOriginalText().trim().toLowerCase();
+        final String searchKey = urlView.getOriginalText().trim();
         for (int i = 0; i < texts.size(); i++) {
             final TextView item = (TextView) View.inflate(getContext(), R.layout.tag_text, null);
             final String str = texts.get(i).toString();
-            final int idx = str.toLowerCase().indexOf(searchKey);
+            final int idx = str.indexOf(searchKey);
             if (idx != -1) {
                 SpannableStringBuilder builder = new SpannableStringBuilder(texts.get(i));
                 builder.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
@@ -279,7 +277,7 @@ public class UrlInputFragment extends Fragment implements UrlInputContract.View,
 
     @Override
     public void onTextChange(String originalText, String autocompleteText) {
-        if (autoCompleteInProgress) {
+        if(autoCompleteInProgress) {
             return;
         }
         UrlInputFragment.this.presenter.onInput(originalText, detectThrottle());

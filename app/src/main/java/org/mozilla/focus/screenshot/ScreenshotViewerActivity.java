@@ -20,10 +20,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Parcelable;
 import android.provider.MediaStore;
 import android.support.annotation.NonNull;
-import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.widget.Toolbar;
 import android.view.LayoutInflater;
@@ -41,8 +39,6 @@ import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView;
 
 import org.mozilla.focus.R;
 import org.mozilla.focus.locale.LocaleAwareAppCompatActivity;
-import org.mozilla.focus.permission.PermissionHandle;
-import org.mozilla.focus.permission.PermissionHandler;
 import org.mozilla.focus.provider.QueryHandler;
 import org.mozilla.focus.screenshot.model.ImageInfo;
 import org.mozilla.focus.screenshot.model.Screenshot;
@@ -64,13 +60,6 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
     public static final int REQ_CODE_VIEW_SCREENSHOT = 1000;
     public static final int RESULT_NOTIFY_SCREENSHOT_IS_DELETED = 100;
     public static final int RESULT_OPEN_URL = RESULT_NOTIFY_SCREENSHOT_IS_DELETED + 1;
-
-    private PermissionHandler permissionHandler;
-    private static final int ACTION_VIEW = 0;
-    private static final int ACTION_EDIT = ACTION_VIEW + 1;
-    private static final int ACTION_SHARE = ACTION_VIEW + 2;
-    private static final int ACTION_DELETE = ACTION_VIEW + 3;
-
     private static int REQUEST_CODE_VIEW_SCREENSHOT = 101;
     private static int REQUEST_CODE_EDIT_SCREENSHOT = 102;
     private static int REQUEST_CODE_SHARE_SCREENSHOT = 103;
@@ -98,67 +87,6 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        permissionHandler = new PermissionHandler(new PermissionHandle() {
-
-            private void viewScreenshot() {
-                setupView(true);
-                initScreenshotInfo(false);
-            }
-
-            private void doAction(int actionId) {
-                switch (actionId) {
-                    case ACTION_VIEW:
-                        viewScreenshot();
-                        break;
-                    case ACTION_EDIT:
-                        onEditClick();
-                        break;
-                    case ACTION_SHARE:
-                        onShareClick();
-                        break;
-                    case ACTION_DELETE:
-                        onDeleteClick();
-                        break;
-                    default:
-                        throw new IllegalArgumentException("Unknown Action");
-                }
-            }
-
-            @Override
-            public void doActionDirect(String permission, int actionId, Parcelable params) {
-                doAction(actionId);
-            }
-
-            @Override
-            public void doActionGranted(String permission, int actionId, Parcelable params) {
-                doAction(actionId);
-            }
-
-            @Override
-            public void doActionSetting(String permission, int actionId, Parcelable params) {
-                doAction(actionId);
-            }
-
-            @Override
-            public void doActionNoPermission(String permission, int actionId, Parcelable params) {
-                // Do nothing
-            }
-
-            @Override
-            public int getDoNotAskAgainDialogString(int actionId) {
-                return R.string.permission_dialog_msg_storage;
-            }
-
-            @Override
-            public Snackbar makeAskAgainSnackBar(int actionId) {
-                return PermissionHandler.makeAskAgainSnackBar(ScreenshotViewerActivity.this, findViewById(R.id.root), R.string.permission_toast_storage);
-            }
-
-            @Override
-            public void requestPermissions(int actionId) {
-                ActivityCompat.requestPermissions(ScreenshotViewerActivity.this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, actionId);
-            }
-        });
 
         setContentView(R.layout.activity_screenshot_viewer);
 
@@ -186,7 +114,14 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
         initInfoItemArray();
         if (mScreenshot != null) {
             if (new File(mScreenshot.getImageUri()).exists()) {
-                permissionHandler.tryAction(this, Manifest.permission.READ_EXTERNAL_STORAGE, ACTION_VIEW, null);
+                if(checkPermissions()) {
+                    setupView(true);
+                    initScreenshotInfo(false);
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_CODE_VIEW_SCREENSHOT);
+                    }
+                }
             } else {
                 setupView(false);
                 Toast.makeText(this, R.string.message_cannot_find_screenshot, Toast.LENGTH_LONG).show();
@@ -194,23 +129,6 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
         } else {
             finish();
         }
-    }
-
-    @Override
-    public void onRestoreInstanceState(Bundle savedInstanceState) {
-        permissionHandler.onRestoreInstanceState(savedInstanceState);
-    }
-
-    @Override
-    public void onSaveInstanceState(Bundle outState) {
-        permissionHandler.onSaveInstanceState(outState);
-        super.onSaveInstanceState(outState);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        permissionHandler.onActivityResult(this, requestCode, resultCode, data);
     }
 
     @Override
@@ -232,17 +150,35 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
                 finish();
                 break;
             case R.id.screenshot_viewer_btn_edit:
-                permissionHandler.tryAction(this, Manifest.permission.READ_EXTERNAL_STORAGE, ACTION_EDIT, null);
+                if(checkPermissions()) {
+                    onEditClick();
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_CODE_EDIT_SCREENSHOT);
+                    }
+                }
                 break;
             case R.id.screenshot_viewer_btn_share:
-                permissionHandler.tryAction(this, Manifest.permission.READ_EXTERNAL_STORAGE, ACTION_SHARE, null);
+                if(checkPermissions()) {
+                    onShareClick();
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_CODE_SHARE_SCREENSHOT);
+                    }
+                }
                 break;
             case R.id.screenshot_viewer_btn_info:
                 TelemetryWrapper.showCaptureInfo();
                 onInfoClick();
                 break;
             case R.id.screenshot_viewer_btn_delete:
-                permissionHandler.tryAction(this, Manifest.permission.READ_EXTERNAL_STORAGE, ACTION_DELETE, null);
+                if(checkPermissions()) {
+                    onDeleteClick();
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_CODE_DELETE_SCREENSHOT);
+                    }
+                }
                 break;
             default:
                 break;
@@ -264,7 +200,24 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        permissionHandler.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_VIEW_SCREENSHOT) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                setupView(true);
+                initScreenshotInfo(false);
+            }
+        } else if(requestCode == REQUEST_CODE_EDIT_SCREENSHOT) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                onEditClick();
+            }
+        } else if(requestCode == REQUEST_CODE_SHARE_SCREENSHOT) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                onShareClick();
+            }
+        } else if(requestCode == REQUEST_CODE_DELETE_SCREENSHOT) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                onDeleteClick();
+            }
+        }
     }
 
     private void setupView(boolean existed) {
@@ -286,14 +239,14 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
     }
 
     private void initScreenshotInfo(boolean withShare) {
-        if (mScreenshot != null) {
-            if (mScreenshot.getTimestamp() > 0) {
+        if(mScreenshot != null) {
+            if(mScreenshot.getTimestamp() > 0) {
                 Calendar cal = Calendar.getInstance();
                 cal.setTimeInMillis(mScreenshot.getTimestamp());
                 mInfoItems.get(0).title = getString(R.string.screenshot_image_viewer_dialog_info_time1, sSdfInfoTime.format(cal.getTime()));
             }
             File imgFile = new File(mScreenshot.getImageUri());
-            if (imgFile.exists()) {
+            if(imgFile.exists()) {
                 showProgressBar(DELAY_MILLIS_TO_SHOW_PROGRESS_BAR);
 
                 BitmapFactory.Options options = new BitmapFactory.Options();
@@ -313,7 +266,7 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
             imageSource = ImageSource.uri(mImageUri);
             mImgScreenshot.setImage(imageSource, ImageViewState.ALIGN_TOP);
 
-            if (withShare) {
+            if(withShare) {
                 onShareClick();
             }
         }
@@ -350,7 +303,7 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
     }
 
     private void onShareClick() {
-        if (mImageUri != null) {
+        if(mImageUri != null) {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -384,7 +337,7 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
         builder.setAdapter(new InfoItemAdapter(this, mInfoItems), null);
         builder.setPositiveButton(R.string.action_ok, null);
         AlertDialog dialog = builder.create();
-        if (dialog.getListView() != null) {
+        if(dialog.getListView() != null) {
             dialog.getListView().setSelector(android.R.color.transparent);
         }
         dialog.show();
@@ -413,13 +366,12 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
         float sizeGo = sizeMo * sizeKb;
         float sizeTerra = sizeGo * sizeKb;
 
-        if (size < sizeMo) {
-            return df.format(size / sizeKb) + " KB";
-        } else if (size < sizeGo) {
+        if(size < sizeMo)
+            return df.format(size / sizeKb)+ " KB";
+        else if(size < sizeGo)
             return df.format(size / sizeMo) + " MB";
-        } else if (size < sizeTerra) {
+        else if(size < sizeTerra)
             return df.format(size / sizeGo) + " GB";
-        }
 
         return "";
     }
@@ -438,7 +390,7 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
             TextView textTitle = (TextView) convertView.findViewById(R.id.screenshot_info_dialog_text);
 
             textTitle.setText(item.title);
-            if (position == 4) {
+            if(position == 4) {
                 convertView.setOnLongClickListener(new View.OnLongClickListener() {
                     @Override
                     public boolean onLongClick(View v) {
@@ -453,9 +405,9 @@ public class ScreenshotViewerActivity extends LocaleAwareAppCompatActivity imple
     }
 
     private void proceedDelete() {
-        if (mScreenshot != null) {
+        if(mScreenshot != null) {
             File file = new File(mScreenshot.getImageUri());
-            if (file.exists()) {
+            if(file.exists()) {
                 try {
                     file.delete();
                 } catch (Exception ex) {

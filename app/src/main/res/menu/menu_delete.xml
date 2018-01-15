@@ -12,6 +12,10 @@
         android:title="@string/delete_file"/>
 
     <item
+        android:id="@+id/open_folder"
+        android:title="Open folder"/>
+
+    <item
         android:id="@+id/cancel"
         android:title="@string/action_cancel"/>
 </menu>

@@ -63,8 +63,7 @@ public class UrlAutoCompleteFilter implements InlineAutocompleteEditText.OnFilte
         }
     }
 
-    @VisibleForTesting
-    void onDomainsLoaded(Set<String> domains) {
+    @VisibleForTesting void onDomainsLoaded(Set<String> domains) {
         this.domains = domains;
     }
 

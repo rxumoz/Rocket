@@ -22,8 +22,7 @@ public class HistoryContract {
 
     public static final class BrowsingHistory implements BaseColumns {
 
-        private BrowsingHistory() {
-        }
+        private BrowsingHistory() {}
 
         public static final Uri CONTENT_URI = Uri.withAppendedPath(AUTHORITY_URI, TABLE_NAME);
 

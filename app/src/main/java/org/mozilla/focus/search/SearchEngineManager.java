@@ -45,8 +45,7 @@ public class SearchEngineManager extends BroadcastReceiver {
         return instance;
     }
 
-    private SearchEngineManager() {
-    }
+    private SearchEngineManager() {}
 
     public void init(Context context) {
         context.registerReceiver(this, new IntentFilter(Intent.ACTION_LOCALE_CHANGED));
