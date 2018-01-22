@@ -71,6 +71,7 @@ import org.mozilla.focus.tabs.TabsSessionProvider;
 import org.mozilla.focus.tabs.TabsViewListener;
 import org.mozilla.focus.tabs.tabtray.TabTray;
 import org.mozilla.focus.tabs.utils.TabUtil;
+import org.mozilla.focus.tabs.TabView;
 import org.mozilla.focus.telemetry.TelemetryWrapper;
 import org.mozilla.focus.utils.AppConstants;
 import org.mozilla.focus.utils.ColorUtils;
@@ -571,6 +572,7 @@ public class BrowserFragment extends LocaleAwareFragment implements View.OnClick
         }
     }
 
+
     /**
      * Hide system bars. They can be revealed temporarily with system gestures, such as swiping from
      * the top of the screen. These transient system bars will overlay app’s content, may have some
@@ -807,6 +809,7 @@ public class BrowserFragment extends LocaleAwareFragment implements View.OnClick
 
     public boolean canGoForward() {
         return tabsSession.getFocusTab() != null && tabsSession.getFocusTab().getTabView() != null && tabsSession.getFocusTab().getTabView().canGoForward();
+        
     }
 
     public boolean isLoading() {
@@ -987,6 +990,7 @@ public class BrowserFragment extends LocaleAwareFragment implements View.OnClick
             backgroundTransition.resetTransition();
         }
 
+
         private void updateUrlFromWebView(@NonNull Tab source) {
             if (tabsSession.getFocusTab() != null) {
                 final String viewURL = tabsSession.getFocusTab().getUrl();
@@ -1009,6 +1013,7 @@ public class BrowserFragment extends LocaleAwareFragment implements View.OnClick
 
                 siteIdentity.setImageLevel(isSecure ? SITE_LOCK : SITE_GLOBE);
             }
+
             historyInserter.onTabFinished(tab);
         }
 
@@ -1033,8 +1038,10 @@ public class BrowserFragment extends LocaleAwareFragment implements View.OnClick
                 return;
             }
 
+
             if (tabsSession.getFocusTab() != null) {
                 final String currentUrl = tabsSession.getFocusTab().getUrl();
+
                 final boolean progressIsForLoadedUrl = TextUtils.equals(currentUrl, loadedUrl);
                 // Some new url may give 100 directly and then start from 0 again. don't treat
                 // as loaded for these urls;
@@ -1058,6 +1065,7 @@ public class BrowserFragment extends LocaleAwareFragment implements View.OnClick
             }
 
             return IntentUtils.handleExternalUri(getContext(), url);
+
         }
 
         @Override
